@@ -4,78 +4,83 @@ from google.cloud import firestore
 from google.oauth2 import service_account
 import json
 
+st.set_page_config(page_title="Registro de Nombres", page_icon="📝")
 
-key_dict = json.loads(st.secrets["textkey"])
-creds = service_account.Credentials.from_service_account_info(key_dict)
-db = firestore.Client(credentials=creds, project="names-project-demo")
-dbNames = db.collection("names")
-st.header("Nuevo registro")
-index = st.text_input("Index")
-name = st.text_input("Name")
-sex = st.selectbox(
-    'Select Sex',
-    ('F', 'M', 'Other'))
-submit = st.button("Crear nuevo registro")
+# ===========================
+#   FIRESTORE (CONECCIÓN)
+# ===========================
 
-# Once the name has submitted, upload it to the database
-if index and name and sex and submit:
-    doc_ref = db.collection("names").document(name)
-    doc_ref.set({
-    "index": index,
-    "name": name,
-    "sex": sex
-    })
-    st.sidebar.write("Registro insertado correctamente")
-# ...
+@st.cache_resource
+def get_db():
+    """Carga credenciales desde st.secrets, crea cliente Firestore y lo cachéa."""
+    key_dict = json.loads(st.secrets["textkey"])
+    creds = service_account.Credentials.from_service_account_info(key_dict)
+    db = firestore.Client(credentials=creds, project="names-project-demo")
+    return db
+
+
+# Obtener cliente Firestore
+db = get_db()
+collection = db.collection("names")
+
+
+# ===========================
+#   FUNCIÓN PARA CARGAR POR NOMBRE
+# ===========================
 
 def loadByName(name):
-    names_ref = dbNames.where(u'name', u'==', name)
-    currentName = None
-    for myname in names_ref.stream():
-        currentName = myname
-    return currentName
+    """Buscar un documento exacto por nombre."""
+    doc_ref = collection.document(name)
+    doc = doc_ref.get()
 
-st.sidebar.subheader("Buscar nombre")
-nameSearch = st.sidebar.text_input("nombre")
-btnFiltrar = st.sidebar.button("Buscar")
-if btnFiltrar:
-    doc = loadByName(nameSearch)
-    if doc is None:
-        st.sidebar.write("Nombre no existe")
+    if doc.exists:
+        return doc.to_dict()
     else:
-        st.sidebar.write(doc.to_dict())
+        return None
 
 
-# ...
-st.sidebar.markdown("""---""")
-btnEliminar = st.sidebar.button("Eliminar")
-if btnEliminar:
-    deletename = loadByName(nameSearch)
-    if deletename is None:
-        st.sidebar.write(f"{nameSearch} no existe")
+# ===========================
+#   INTERFAZ PRINCIPAL
+# ===========================
+
+st.title("Base de Datos con Firestore")
+st.subheader("Nuevo registro")
+
+index = st.text_input("Index")
+name = st.text_input("Name")
+sex = st.selectbox("Select Sex", ("F", "M", "Other"))
+submit = st.button("Crear nuevo registro")
+
+# ===========================
+#   INSERTAR NUEVO REGISTRO
+# ===========================
+
+if submit:
+    if index.strip() == "" or name.strip() == "":
+        st.error("Index y Name son obligatorios.")
     else:
-        dbNames.document(deletename.id).delete()
-        st.sidebar.write(f"{nameSearch} eliminado")
+        doc_ref = collection.document(name)
+        doc_ref.set({
+            "index": index,
+            "name": name,
+            "sex": sex
+        })
+        st.success("Registro insertado correctamente.")
+        st.balloons()
 
 
-#...
-st.sidebar.markdown("""---""")
-newname = st.sidebar.text_input("Actualizar nombre")
-btnActualizar = st.sidebar.button("Actualizar")
-if btnActualizar:
-    updatename = loadByName(nameSearch)
-    if updatename is None:
-        st.write(f"{nameSearch} no existe")
+# ===========================
+#   BÚSQUEDA DE REGISTROS
+# ===========================
+
+st.sidebar.header("Buscar registro")
+search_name = st.sidebar.text_input("Nombre a buscar")
+search_btn = st.sidebar.button("Buscar")
+
+if search_btn and search_name.strip() != "":
+    data = loadByName(search_name)
+    if data:
+        st.sidebar.success("Registro encontrado:")
+        st.sidebar.json(data)
     else:
-        myupdatename = dbNames.document(updatename.id)
-        myupdatename.update(
-        {
-            "name": newname
-        }
-    )
-
-# ...
-names_ref = list(db.collection(u'names').stream())
-names_dict = list(map(lambda x: x.to_dict(), names_ref))
-names_dataframe = pd.DataFrame(names_dict)
-st.dataframe(names_dataframe)
+        st.sidebar.error("No existe un registro con ese nombre.")
