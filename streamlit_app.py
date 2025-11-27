@@ -25,7 +25,7 @@ if index and name and sex and submit:
     "name": name,
     "sex": sex
     })
- st.sidebar.write("Registro insertado correctamente")
+    st.sidebar.write("Registro insertado correctamente")
 # ...
 
 def loadByName(name):
